@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>La Trastienda</title>
+</head>
+<body>
+<script>
+'use strict';
+// ---------- Fake Node runtime ----------
+const BASE = '/home/jota/trastienda/';
+
+function inspect(v, depth = 0) {
+  if (v === null) return 'null';
+  if (v === undefined) return 'undefined';
+  if (typeof v === 'string') return depth === 0 ? v : "'" + v + "'";
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (typeof v === 'function') return '[Function: ' + (v.name || 'anonymous') + ']';
+  if (v.__buffer) return formatBuffer(v);
+  if (Array.isArray(v)) {
+    return v.length ? '[ ' + v.map(x => inspect(x, depth + 1)).join(', ') + ' ]' : '[]';
+  }
+  if (typeof v === 'object') {
+    const keys = Object.keys(v);
+    if (!keys.length) return '{}';
+    return '{ ' + keys.map(k => k + ': ' + inspect(v[k], depth + 1)).join(', ') + ' }';
+  }
+  return String(v);
+}
+
+function makeBuffer(text) {
+  return { __buffer: true, bytes: new TextEncoder().encode(text) };
+}
+
+function formatBuffer(b) {
+  const shown = Array.from(b.bytes.slice(0, 50)).map(x => x.toString(16).padStart(2, '0')).join(' ');
+  const rest = b.bytes.length - 50;
+  return '<Buffer ' + shown + (rest > 0 ? ' ... ' + rest + ' more bytes' : '') + '>';
+}
+
+// Runs the virtual project in a fake Node. NOT a sandbox: player code runs in
+// this page with `new Function`; only `require`, `module`, `exports`, `console`
+// and `__dirname` are shadowed. Threat model is self-XSS (the player's own
+// code, in the player's own browser). If player code is ever shown to other
+// players, move execution into an <iframe sandbox>.
+function runNode(files, entry) {
+  const lines = [];
+  const queue = [];   // { fn, file } tasks scheduled by the fake fs
+  const cache = {};   // file name -> module object
+  let current = entry;
+
+  const fakeConsole = { log: (...args) => lines.push(args.map(a => inspect(a)).join(' ')) };
+  fakeConsole.error = fakeConsole.warn = fakeConsole.info = fakeConsole.log;
+
+  function moduleError(spec, from) {
+    const e = new Error("Cannot find module '" + spec + "'");
+    e.code = 'MODULE_NOT_FOUND';
+    e.requireStack = [BASE + from];
+    e.__file = from; // Node attributes the throw to the file that called require
+    return e;
+  }
+
+  const fakePath = { join: (...parts) => parts.join('/').replace(/\/+/g, '/') };
+
+  const fakeFs = {
+    readFile(name, encoding, callback) {
+      if (typeof encoding === 'function') { callback = encoding; encoding = null; }
+      const key = name.startsWith(BASE) ? name.slice(BASE.length) : name;
+      queue.push({ file: current, fn() {
+        if (!(key in files)) {
+          const err = new Error("ENOENT: no such file or directory, open '" + name + "'");
+          err.code = 'ENOENT';
+          callback(err);
+        } else if (encoding && /^utf-?8$/i.test(encoding)) {
+          callback(null, files[key]);
+        } else {
+          callback(null, makeBuffer(files[key]));
+        }
+      } });
+    },
+  };
+
+  function resolve(spec, from) {
+    if (spec === 'fs') return fakeFs;
+    if (spec === 'path') return fakePath;
+    if (typeof spec === 'string' && spec.startsWith('./')) {
+      const base = spec.slice(2);
+      const name = (base in files) ? base : ((base + '.js') in files) ? base + '.js' : null;
+      if (name === null || !name.endsWith('.js')) throw moduleError(spec, from);
+      return load(name);
+    }
+    throw moduleError(spec, from);
+  }
+
+  function load(name) {
+    if (cache[name]) return cache[name].exports;
+    const module = { exports: {} };
+    cache[name] = module;
+    const previous = current;
+    current = name;
+    try {
+      // `document` and `window` are shadowed with undefined so the player gets
+      // the same experience as the Node REPL (no DOM here). Still not a sandbox.
+      new Function('require', 'module', 'exports', 'console', '__dirname', 'document', 'window',
+        '"use strict";\n' + files[name])(
+        spec => resolve(spec, name), module, module.exports, fakeConsole, BASE.slice(0, -1), undefined, undefined);
+    } catch (err) {
+      if (err && typeof err === 'object' && !err.__file) err.__file = name;
+      throw err;
+    } finally {
+      current = previous;
+    }
+    return module.exports;
+  }
+
+  function formatError(err, file) {
+    const name = (err && err.name) || 'Error';
+    const msg = err && err.message !== undefined ? err.message : String(err);
+    let out = name + ': ' + msg;
+    if (err && err.requireStack) out += '\nRequire stack:\n' + err.requireStack.map(p => '- ' + p).join('\n');
+    return out + '\n    at ' + BASE + file;
+  }
+
+  let ok = true;
+  try {
+    if (!(entry in files)) throw moduleError('./' + entry, entry);
+    load(entry);
+    while (queue.length) {
+      const task = queue.shift();
+      current = task.file;
+      task.fn();
+    }
+  } catch (err) {
+    ok = false;
+    // `current` is restored by load()'s finally, so re-derive the failing file
+    // from the error when it carries one; otherwise use the last known file.
+    lines.push(formatError(err, err && err.__file ? err.__file : current));
+  }
+  return { output: lines.join('\n'), ok };
+}
+</script>
+</body>
+</html>

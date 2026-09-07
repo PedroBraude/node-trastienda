@@ -1,0 +1,8 @@
+{
+  "name": "la-trastienda",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Juego para aprender módulos de Node.js arreglando código roto",
+  "scripts": { "test": "node --test" },
+  "devDependencies": { "jsdom": "^30.0.1" }
+}
