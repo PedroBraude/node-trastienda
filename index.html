@@ -40,10 +40,10 @@ function formatBuffer(b) {
 }
 
 // Runs the virtual project in a fake Node. NOT a sandbox: player code runs in
-// this page with `new Function`; only `require`, `module`, `exports`, `console`
-// and `__dirname` are shadowed. Threat model is self-XSS (the player's own
-// code, in the player's own browser). If player code is ever shown to other
-// players, move execution into an <iframe sandbox>.
+// this page with `new Function`; only `require`, `module`, `exports`, `console`,
+// `__dirname`, `document` and `window` are shadowed. Threat model is self-XSS
+// (the player's own code, in the player's own browser). If player code is ever
+// shown to other players, move execution into an <iframe sandbox>.
 function runNode(files, entry) {
   const lines = [];
   const queue = [];   // { fn, file } tasks scheduled by the fake fs

@@ -4,7 +4,7 @@ const { loadRuntime } = require('./load');
 
 const { runNode, inspect } = loadRuntime();
 
-const PRODUCTOS = `const catalogo = [
+const PRODUCTS_JS = `const catalogo = [
   { id: 1, nombre: "Silla", precio: 10 },
   { id: 2, nombre: "Mesa", precio: 20 },
 ];
@@ -14,7 +14,7 @@ module.exports = catalogo;
 test('require with ./ resolves a local module and runs it', () => {
   const r = runNode({
     'app.js': 'const c = require("./productos");\nconsole.log("Total:", c.length);',
-    'productos.js': PRODUCTOS,
+    'productos.js': PRODUCTS_JS,
   }, 'app.js');
   assert.equal(r.ok, true);
   assert.equal(r.output, 'Total: 2');
@@ -23,7 +23,7 @@ test('require with ./ resolves a local module and runs it', () => {
 test('require with ./x.js resolves like ./x', () => {
   const r = runNode({
     'app.js': 'console.log(require("./productos.js").length);',
-    'productos.js': PRODUCTOS,
+    'productos.js': PRODUCTS_JS,
   }, 'app.js');
   assert.equal(r.output, '2');
 });
@@ -31,7 +31,7 @@ test('require with ./x.js resolves like ./x', () => {
 test('require without ./ fails with Cannot find module and a require stack', () => {
   const r = runNode({
     'app.js': 'const c = require("productos");\nconsole.log("never");',
-    'productos.js': PRODUCTOS,
+    'productos.js': PRODUCTS_JS,
   }, 'app.js');
   assert.equal(r.ok, false);
   assert.equal(r.output,
@@ -89,7 +89,7 @@ test('document and window are undefined inside player code', () => {
   assert.equal(r.output, 'undefined undefined');
 });
 
-const INVENTARIO = 'Silla de Comedor - 15 unidades\nMesa de Roble - 5 unidades\nSofá de 3 Cuerpos - 0 unidades\nBiblioteca Modular - 8 unidades';
+const INVENTORY_TXT = 'Silla de Comedor - 15 unidades\nMesa de Roble - 5 unidades\nSofá de 3 Cuerpos - 0 unidades\nBiblioteca Modular - 8 unidades';
 
 test('readFile with utf8 delivers the text after the main module finishes', () => {
   const r = runNode({
@@ -98,16 +98,16 @@ fs.readFile("inventario.txt", "utf8", (error, contenido) => {
   console.log(contenido);
 });
 console.log("Pedí el archivo, sigo con lo mío...");`,
-    'inventario.txt': INVENTARIO,
+    'inventario.txt': INVENTORY_TXT,
   }, 'leer.js');
   assert.equal(r.ok, true);
-  assert.equal(r.output, 'Pedí el archivo, sigo con lo mío...\n' + INVENTARIO);
+  assert.equal(r.output, 'Pedí el archivo, sigo con lo mío...\n' + INVENTORY_TXT);
 });
 
 test('readFile without encoding delivers a Buffer that prints like Node', () => {
   const r = runNode({
     'leer.js': 'require("fs").readFile("inventario.txt", (e, c) => console.log(c));',
-    'inventario.txt': INVENTARIO,
+    'inventario.txt': INVENTORY_TXT,
   }, 'leer.js');
   assert.match(r.output, /^<Buffer 53 69 6c 6c 61 20 .* \.\.\. 71 more bytes>$/);
 });
