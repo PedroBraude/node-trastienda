@@ -88,3 +88,69 @@ test('document and window are undefined inside player code', () => {
   const r = runNode({ 'a.js': 'console.log(typeof document, typeof window);' }, 'a.js');
   assert.equal(r.output, 'undefined undefined');
 });
+
+const INVENTARIO = 'Silla de Comedor - 15 unidades\nMesa de Roble - 5 unidades\nSofá de 3 Cuerpos - 0 unidades\nBiblioteca Modular - 8 unidades';
+
+test('readFile with utf8 delivers the text after the main module finishes', () => {
+  const r = runNode({
+    'leer.js': `const fs = require("fs");
+fs.readFile("inventario.txt", "utf8", (error, contenido) => {
+  console.log(contenido);
+});
+console.log("Pedí el archivo, sigo con lo mío...");`,
+    'inventario.txt': INVENTARIO,
+  }, 'leer.js');
+  assert.equal(r.ok, true);
+  assert.equal(r.output, 'Pedí el archivo, sigo con lo mío...\n' + INVENTARIO);
+});
+
+test('readFile without encoding delivers a Buffer that prints like Node', () => {
+  const r = runNode({
+    'leer.js': 'require("fs").readFile("inventario.txt", (e, c) => console.log(c));',
+    'inventario.txt': INVENTARIO,
+  }, 'leer.js');
+  assert.match(r.output, /^<Buffer 53 69 6c 6c 61 20 .* \.\.\. 71 more bytes>$/);
+});
+
+test('readFile of a short file prints the whole Buffer without "more bytes"', () => {
+  const r = runNode({
+    'leer.js': 'require("fs").readFile("a.txt", (e, c) => console.log(c));',
+    'a.txt': 'hola',
+  }, 'leer.js');
+  assert.equal(r.output, '<Buffer 68 6f 6c 61>');
+});
+
+test('readFile of a missing file calls back with an ENOENT error and no content', () => {
+  const r = runNode({
+    'leer.js': `require("fs").readFile("inventario.txt", "utf8", (error, contenido) => {
+  console.log(error.code, error.message, contenido);
+});`,
+  }, 'leer.js');
+  assert.equal(r.output, "ENOENT ENOENT: no such file or directory, open 'inventario.txt' undefined");
+});
+
+test('an error inside a callback stops the run and is reported on that file', () => {
+  const r = runNode({
+    'leer.js': `const fs = require("fs");
+fs.readFile("nope.txt", "utf8", (error, contenido) => {
+  if (error) { console.log("No pude leer:", error.message); }
+  contenido.split("\\n");
+});
+fs.readFile("nope.txt", "utf8", () => console.log("never"));`,
+  }, 'leer.js');
+  assert.equal(r.ok, false);
+  const lines = r.output.split('\n');
+  assert.equal(lines[0], "No pude leer: ENOENT: no such file or directory, open 'nope.txt'");
+  assert.match(lines[1], /^TypeError: /);
+  assert.equal(lines[2], '    at /home/jota/trastienda/leer.js');
+  assert.equal(lines.length, 3);
+});
+
+test('path.join with __dirname still finds the virtual file', () => {
+  const r = runNode({
+    'leer.js': `const fs = require("fs"); const path = require("path");
+fs.readFile(path.join(__dirname, "a.txt"), "utf8", (e, c) => console.log(c));`,
+    'a.txt': 'hola',
+  }, 'leer.js');
+  assert.equal(r.output, 'hola');
+});
