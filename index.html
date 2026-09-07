@@ -139,6 +139,421 @@ function runNode(files, entry) {
   }
   return { output: lines.join('\n'), ok };
 }
+
+// ---------- Data ----------
+function normalize(text) {
+  return String(text).split('\n').map(l => l.replace(/\s+$/, '')).join('\n').replace(/\n+$/, '');
+}
+
+function withSolution(lv) {
+  return { ...lv.files, ...lv.solution };
+}
+
+const CATALOG_JS = `const catalogo = [
+  { id: 1, nombre: "Silla de Comedor Nórdica", precio: 45000 },
+  { id: 2, nombre: "Mesa de Roble Macizo", precio: 180000 },
+  { id: 3, nombre: "Sofá de 3 Cuerpos Lino", precio: 320000 },
+  { id: 4, nombre: "Biblioteca Modular Pino", precio: 95000 },
+];
+`;
+const PRODUCTS_OK_JS = CATALOG_JS + '\nmodule.exports = catalogo;\n';
+
+// Level 4 uses a five-product catalog so its solution cannot also solve level 2
+// (and vice versa): the cross-check test in test/levels.test.js enforces this.
+const CATALOG_5_BROKEN_JS = `const catalogo = [
+  { id: 1, nombre: "Silla de Comedor Nórdica", precio: 45000 },
+  { id: 2, nombre: "Mesa de Roble Macizo", precios: 180000 },
+  { id: 3, nombre: "Sofá de 3 Cuerpos Lino", precio: 320000 },
+  { id: 4, nombre: "Biblioteca Modular Pino", precio: 95000 },
+  { id: 5, nombre: "Perchero de Pie", precio: 12000 },
+];
+
+module.exports = catalogo;
+`;
+const CATALOG_5_OK_JS = CATALOG_5_BROKEN_JS.replace('precios:', 'precio:');
+
+const INVENTORY_TXT = `Silla de Comedor - 15 unidades
+Mesa de Roble - 5 unidades
+Sofá de 3 Cuerpos - 0 unidades
+Biblioteca Modular - 8 unidades
+`;
+
+const LISTING = `Silla de Comedor Nórdica — $45000
+Mesa de Roble Macizo — $180000
+Sofá de 3 Cuerpos Lino — $320000
+Biblioteca Modular Pino — $95000`;
+
+const INVENTORY_OUTPUT = 'Inventario de Hermanos Jota:\n' + INVENTORY_TXT;
+
+const CHAPTERS = [
+  { name: 'La caja', desc: 'require y module.exports',
+    cierre: 'El catálogo volvió a andar. Cada archivo es una caja: la etiqueta afuera es module.exports, y pedirla por nombre es require.' },
+  { name: 'El depósito', desc: 'fs.readFile y el callback',
+    cierre: 'El inventario se lee solo. Primero el error, después el dato. Y JavaScript anota y sigue: no espera a nadie.' },
+];
+
+const LEVELS = [
+  // ---- Capítulo 1: La caja ----
+  {
+    ch: 0, title: 'El punto-barra',
+    story: 'Bienvenido a la trastienda. Acá guardamos los muebles y un sistema en Node que armó el sobrino de los Jota antes de irse. Desde que se fue, nada corre. Empecemos por el catálogo: corré <code>node app.js</code> y fijate qué dice.',
+    lesson: '<p>Un módulo es un archivo <code>.js</code> que exporta algo. Para pedir uno tuyo, <code>require</code> necesita la ruta con <strong>punto-barra</strong>: <code>./</code> significa "en esta carpeta". Sin eso, Node cree que le pedís un paquete instalado y no lo encuentra.</p><pre>const catalogo = require("./productos");</pre><p>La extensión <code>.js</code> se puede omitir.</p>',
+    task: 'Leé el error de la terminal y arreglá el <code>require</code> de <code>app.js</code> para que muestre el catálogo.',
+    hint: 'Sin punto es de fábrica; con punto es nuestro. Falta el ./ antes de productos.',
+    files: {
+      'app.js': `const catalogo = require("productos");
+
+console.log("Productos en el catálogo:", catalogo.length);
+catalogo.forEach((producto) => {
+  console.log(\`\${producto.nombre} — $\${producto.precio}\`);
+});
+`,
+      'productos.js': PRODUCTS_OK_JS,
+    },
+    entry: 'app.js',
+    expected: 'Productos en el catálogo: 4\n' + LISTING,
+    solution: {
+      'app.js': `const catalogo = require("./productos");
+
+console.log("Productos en el catálogo:", catalogo.length);
+catalogo.forEach((producto) => {
+  console.log(\`\${producto.nombre} — $\${producto.precio}\`);
+});
+`,
+    },
+  },
+  {
+    ch: 0, title: 'La etiqueta de la caja',
+    story: 'Bien. Ahora el listado corto que usamos para el remito. Dice <em>undefined</em>, y "undefined" no es un mueble que tengamos.',
+    lesson: '<p>Cada archivo en Node es una caja cerrada: lo que definís adentro es privado. Para que otro archivo pueda usarlo, tenés que ponerle la <strong>etiqueta</strong> afuera:</p><pre>module.exports = catalogo;</pre><p>Sin etiqueta, <code>require</code> devuelve una caja vacía: <code>{}</code>. Y un objeto vacío no tiene <code>length</code> ni <code>forEach</code>. Fijate que JavaScript no avisa en la primera línea: dice <code>undefined</code> y sigue hasta que explota.</p>',
+    task: 'Mirá <code>productos.js</code>. El array está, pero falta algo al final. Hacé que <code>app.js</code> reciba el catálogo.',
+    hint: 'Al final de productos.js: module.exports = catalogo;',
+    files: {
+      'app.js': `const catalogo = require("./productos");
+
+console.log("Remito de hoy:", catalogo.length, "productos");
+catalogo.forEach((producto) => {
+  console.log("-", producto.nombre);
+});
+`,
+      'productos.js': CATALOG_JS,
+    },
+    entry: 'app.js',
+    expected: `Remito de hoy: 4 productos
+- Silla de Comedor Nórdica
+- Mesa de Roble Macizo
+- Sofá de 3 Cuerpos Lino
+- Biblioteca Modular Pino`,
+    solution: { 'productos.js': PRODUCTS_OK_JS },
+  },
+  {
+    ch: 0, title: 'Varias herramientas',
+    story: 'Los precios tienen que salir con puntitos de mil, como en la vidriera. El sobrino hizo un archivo de utilidades, pero solo una funciona.',
+    lesson: '<p>Si una caja tiene varias herramientas, exportás un <strong>objeto</strong> y sacás las que necesitás con llaves:</p><pre>module.exports = { formatearPrecio, calcularTotal };\n\nconst { formatearPrecio, calcularTotal } = require("./utilidades");</pre><p>Si exportás una sola función y del otro lado sacás con llaves, las dos quedan <code>undefined</code>: una función no tiene una propiedad llamada <code>formatearPrecio</code>.</p>',
+    task: 'Arreglá la exportación de <code>utilidades.js</code> para que <code>app.js</code> pueda usar las dos funciones.',
+    hint: 'module.exports tiene que ser un objeto con las dos funciones adentro, entre llaves.',
+    files: {
+      'app.js': `const catalogo = require("./productos");
+const { formatearPrecio, calcularTotal } = require("./utilidades");
+
+catalogo.forEach((producto) => {
+  console.log(\`\${producto.nombre} — \${formatearPrecio(producto.precio)}\`);
+});
+console.log("Total del catálogo:", formatearPrecio(calcularTotal(catalogo)));
+`,
+      'productos.js': PRODUCTS_OK_JS,
+      'utilidades.js': `function formatearPrecio(precio) {
+  return "$" + precio.toLocaleString("es-AR");
+}
+
+function calcularTotal(productos) {
+  let total = 0;
+  productos.forEach((p) => {
+    total = total + p.precio;
+  });
+  return total;
+}
+
+module.exports = formatearPrecio;
+`,
+    },
+    entry: 'app.js',
+    expected: `Silla de Comedor Nórdica — $45.000
+Mesa de Roble Macizo — $180.000
+Sofá de 3 Cuerpos Lino — $320.000
+Biblioteca Modular Pino — $95.000
+Total del catálogo: $640.000`,
+    solution: {
+      'utilidades.js': `function formatearPrecio(precio) {
+  return "$" + precio.toLocaleString("es-AR");
+}
+
+function calcularTotal(productos) {
+  let total = 0;
+  productos.forEach((p) => {
+    total = total + p.precio;
+  });
+  return total;
+}
+
+module.exports = { formatearPrecio, calcularTotal };
+`,
+    },
+  },
+  {
+    ch: 0, title: 'El total no cierra',
+    story: 'La caja del día. El total dice <em>NaN</em>. Yo sé de muebles, no sé qué es NaN, pero sé que no es plata.',
+    lesson: '<p><code>NaN</code> quiere decir <em>Not a Number</em>: algo que no era número entró en una cuenta. Si un producto no tiene la propiedad <code>precio</code>, leerla da <code>undefined</code>, y <code>45000 + undefined</code> es <code>NaN</code>.</p><p>Leé la salida línea por línea: el síntoma aparece antes del total. Un <code>$undefined</code> te dice exactamente qué producto tiene el dato mal.</p><p>Variante: si el precio fuera un string (<code>"180000"</code>), el <code>+</code> no suma, <strong>pega</strong>: <code>"45000180000"</code>. Otro síntoma, misma causa: un dato que no es número.</p>',
+    task: 'Encontrá en <code>productos.js</code> el producto con el dato mal y corregilo.',
+    hint: 'Compará las claves de los cinco productos. Una está escrita distinto.',
+    files: {
+      'app.js': `const catalogo = require("./productos");
+
+let total = 0;
+catalogo.forEach((producto) => {
+  console.log(\`\${producto.nombre} — $\${producto.precio}\`);
+  total = total + producto.precio;
+});
+
+console.log("Cantidad:", catalogo.length);
+console.log("Total:", total);
+`,
+      'productos.js': CATALOG_5_BROKEN_JS,
+    },
+    entry: 'app.js',
+    expected: LISTING + '\nPerchero de Pie — $12000\nCantidad: 5\nTotal: 652000',
+    solution: { 'productos.js': CATALOG_5_OK_JS },
+  },
+  {
+    ch: 0, title: 'De fábrica',
+    story: 'Ahora el inventario del depósito, que está en un archivo de texto. El programa que lo lee no encuentra... ¿fs? Yo no tengo ningún archivo que se llame así.',
+    lesson: '<p>Además de las cajas que armamos nosotros, Node trae cajas <strong>de fábrica</strong>. La primera que importa es <code>fs</code>, <em>file system</em>: leer y escribir archivos. Las de fábrica se piden <strong>sin</strong> punto-barra:</p><pre>const fs = require("fs");</pre><p>Regla: sin punto es de fábrica; con punto es nuestro.</p>',
+    task: 'Arreglá el <code>require</code> de <code>leer.js</code>.',
+    hint: 'fs no es un archivo tuyo. Sacale el ./',
+    files: {
+      'leer.js': `const fs = require("./fs");
+
+fs.readFile("inventario.txt", "utf8", (error, contenido) => {
+  if (error) {
+    console.log("No pude leer el inventario:", error.message);
+    return;
+  }
+  console.log("Inventario de Hermanos Jota:");
+  console.log(contenido);
+});
+`,
+      'inventario.txt': INVENTORY_TXT,
+    },
+    entry: 'leer.js',
+    expected: INVENTORY_OUTPUT,
+    solution: {
+      'leer.js': `const fs = require("fs");
+
+fs.readFile("inventario.txt", "utf8", (error, contenido) => {
+  if (error) {
+    console.log("No pude leer el inventario:", error.message);
+    return;
+  }
+  console.log("Inventario de Hermanos Jota:");
+  console.log(contenido);
+});
+`,
+    },
+  },
+  // ---- Capítulo 2: El depósito ----
+  {
+    ch: 1, title: 'En qué idioma',
+    story: 'El inventario sale, pero en jeroglíficos. Yo pedí una lista de muebles, no esto.',
+    lesson: '<p>Un archivo en disco son bytes. Si no le decís a <code>readFile</code> en qué idioma leerlos, te devuelve un <code>Buffer</code>: los bytes crudos en hexadecimal. Le tenés que pasar la codificación:</p><pre>fs.readFile("inventario.txt", "utf8", (error, contenido) => { ... });</pre>',
+    task: 'Agregá lo que falta en la llamada a <code>readFile</code> para que salga texto.',
+    hint: 'Entre el nombre del archivo y el callback va "utf8".',
+    files: {
+      'leer.js': `const fs = require("fs");
+
+fs.readFile("inventario.txt", (error, contenido) => {
+  if (error) {
+    console.log("No pude leer el inventario:", error.message);
+    return;
+  }
+  console.log("Stock en el depósito:");
+  console.log(contenido);
+});
+`,
+      'inventario.txt': INVENTORY_TXT,
+    },
+    entry: 'leer.js',
+    expected: 'Stock en el depósito:\n' + INVENTORY_TXT,
+    solution: {
+      'leer.js': `const fs = require("fs");
+
+fs.readFile("inventario.txt", "utf8", (error, contenido) => {
+  if (error) {
+    console.log("No pude leer el inventario:", error.message);
+    return;
+  }
+  console.log("Stock en el depósito:");
+  console.log(contenido);
+});
+`,
+    },
+  },
+  {
+    ch: 1, title: 'Afuera del callback',
+    story: 'Otra vez <em>undefined</em>. Esta vez el archivo se lee bien, lo vi. Pero cuando lo muestra, no hay nada.',
+    lesson: '<p>Leer del disco lleva tiempo. <code>readFile</code> no espera: <strong>anota</strong> que cuando el archivo esté, tiene que llamar a tu función. Mientras tanto, el programa sigue con la línea de abajo.</p><p>Por eso <code>console.log(contenido)</code> afuera del callback corre <em>antes</em> de que el archivo llegue: en ese momento <code>contenido</code> todavía no tiene nada. El dato solo existe <strong>adentro</strong> del callback.</p>',
+    task: 'Mové lo que muestra el inventario adentro del callback de <code>readFile</code>.',
+    hint: 'Los dos console.log tienen que quedar dentro de la función flecha que recibe (error, texto).',
+    files: {
+      'leer.js': `const fs = require("fs");
+
+let contenido;
+fs.readFile("inventario.txt", "utf8", (error, texto) => {
+  contenido = texto;
+});
+
+console.log("Lo que hay en el depósito:");
+console.log(contenido);
+`,
+      'inventario.txt': INVENTORY_TXT,
+    },
+    entry: 'leer.js',
+    expected: 'Lo que hay en el depósito:\n' + INVENTORY_TXT,
+    solution: {
+      'leer.js': `const fs = require("fs");
+
+fs.readFile("inventario.txt", "utf8", (error, texto) => {
+  console.log("Lo que hay en el depósito:");
+  console.log(texto);
+});
+`,
+    },
+  },
+  {
+    ch: 1, title: 'Anota y sigue',
+    story: 'Necesito saber cuántos renglones tiene el inventario. El programa dice cero, y después muestra cuatro. ¿En qué quedamos?',
+    lesson: '<p>Mirá el orden de la salida: "Pedí el inventario, sigo con lo mío..." aparece <strong>antes</strong> que el inventario. Eso es JavaScript: anota y sigue. Es el barista que toma el pedido y atiende al siguiente.</p><p>El conteo se hace adentro del callback, pero se muestra afuera, antes de que el callback corra. En ese momento <code>muebles</code> todavía vale <code>0</code>. Lo que dependa del archivo va adentro del callback.</p>',
+    task: 'Hacé que el conteo se muestre después del inventario, con el número correcto. La línea "sigo con lo mío" tiene que seguir saliendo primero.',
+    hint: 'Mové el console.log del conteo adentro del callback, después de mostrar el contenido.',
+    files: {
+      'leer.js': `const fs = require("fs");
+
+let muebles = 0;
+fs.readFile("inventario.txt", "utf8", (error, contenido) => {
+  const lineas = contenido.trim().split("\\n");
+  muebles = lineas.length;
+  console.log(contenido);
+});
+
+console.log("Pedí el inventario, sigo con lo mío...");
+console.log("Muebles en el depósito:", muebles);
+`,
+      'inventario.txt': INVENTORY_TXT,
+    },
+    entry: 'leer.js',
+    // INVENTORY_TXT ends with "\n" and console.log adds its own, so there is a
+    // blank line before the count, exactly as in real Node.
+    expected: 'Pedí el inventario, sigo con lo mío...\n' + INVENTORY_TXT + '\nMuebles en el depósito: 4',
+    solution: {
+      'leer.js': `const fs = require("fs");
+
+fs.readFile("inventario.txt", "utf8", (error, contenido) => {
+  const lineas = contenido.trim().split("\\n");
+  const muebles = lineas.length;
+  console.log(contenido);
+  console.log("Muebles en el depósito:", muebles);
+});
+
+console.log("Pedí el inventario, sigo con lo mío...");
+`,
+    },
+  },
+  {
+    ch: 1, title: 'Que no explote',
+    story: 'Renombré el inventario a <code>inventario-viejo.txt</code> para hacer uno nuevo. El programa avisa que no lo encuentra, bien, pero después tira un error rojo enorme. Si no lo encuentra, que avise y listo.',
+    lesson: '<p>La costumbre de Node: el callback recibe <code>(error, contenido)</code>. <strong>Primero el error, después el dato.</strong> Si <code>error</code> no es <code>null</code>, salió mal y <code>contenido</code> es <code>undefined</code>.</p><p>Avisar no alcanza: si después del <code>if (error)</code> seguís usando <code>contenido</code>, explota. Hay que <strong>cortar</strong> ahí:</p><pre>if (error) {\n  console.log("No pude leer el inventario:", error.message);\n  return;\n}</pre>',
+    task: 'Hacé que el programa muestre solo el aviso de error y no explote. No cambies el nombre del archivo: el inventario nuevo lo hace Ramón después.',
+    hint: 'Falta un return adentro del if (error).',
+    files: {
+      'leer.js': `const fs = require("fs");
+
+fs.readFile("inventario.txt", "utf8", (error, contenido) => {
+  if (error) {
+    console.log("No encontré el inventario:", error.message);
+  }
+  const lineas = contenido.trim().split("\\n");
+  console.log("Muebles en el depósito:", lineas.length);
+});
+`,
+      'inventario-viejo.txt': INVENTORY_TXT,
+    },
+    entry: 'leer.js',
+    expected: "No encontré el inventario: ENOENT: no such file or directory, open 'inventario.txt'",
+    solution: {
+      'leer.js': `const fs = require("fs");
+
+fs.readFile("inventario.txt", "utf8", (error, contenido) => {
+  if (error) {
+    console.log("No encontré el inventario:", error.message);
+    return;
+  }
+  const lineas = contenido.trim().split("\\n");
+  console.log("Muebles en el depósito:", lineas.length);
+});
+`,
+    },
+    check: files => /\breturn\b/.test(files['leer.js']) && /\.split\(/.test(files['leer.js']),
+  },
+  {
+    ch: 1, title: 'Caso borde',
+    story: 'Último. Quiero saber cuántos muebles están sin stock para pedirlos. El programa dice dos. Yo cuento uno. Y yo cuento bien.',
+    lesson: '<p>El programa busca líneas que contengan <code>"0 unidades"</code>. Pero <code>"10 unidades"</code> también contiene <code>"0 unidades"</code>. Eso es un <strong>caso borde</strong>: un dato válido que tu condición no previó.</p><p>Hay que ser más preciso. Por ejemplo, mirar cómo <em>termina</em> la línea:</p><pre>linea.endsWith("- 0 unidades")</pre>',
+    task: 'Corregí la condición para que cuente solo los muebles con exactamente 0 unidades.',
+    hint: 'includes("0 unidades") agarra "10 unidades". Probá con endsWith.',
+    files: {
+      'leer.js': `const fs = require("fs");
+
+fs.readFile("inventario.txt", "utf8", (error, contenido) => {
+  if (error) {
+    console.log("No pude leer el inventario:", error.message);
+    return;
+  }
+  const lineas = contenido.trim().split("\\n");
+  let sinStock = 0;
+  lineas.forEach((linea) => {
+    if (linea.includes("0 unidades")) {
+      sinStock = sinStock + 1;
+    }
+  });
+  console.log("Muebles sin stock:", sinStock);
+});
+`,
+      'inventario.txt': INVENTORY_TXT + 'Perchero de Pie - 10 unidades\n',
+    },
+    entry: 'leer.js',
+    expected: 'Muebles sin stock: 1',
+    solution: {
+      'leer.js': `const fs = require("fs");
+
+fs.readFile("inventario.txt", "utf8", (error, contenido) => {
+  if (error) {
+    console.log("No pude leer el inventario:", error.message);
+    return;
+  }
+  const lineas = contenido.trim().split("\\n");
+  let sinStock = 0;
+  lineas.forEach((linea) => {
+    if (linea.endsWith("- 0 unidades")) {
+      sinStock = sinStock + 1;
+    }
+  });
+  console.log("Muebles sin stock:", sinStock);
+});
+`,
+    },
+  },
+];
+
+let state, loadLevel, selectTab, setFileContent, run, saveProgress, restoreProgress, unlockedUpTo; // UI bindings are defined in the UI section (Task 4)
 </script>
 </body>
 </html>
