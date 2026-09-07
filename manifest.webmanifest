@@ -1,0 +1,11 @@
+{
+  "name": "La Trastienda",
+  "short_name": "Trastienda",
+  "description": "Aprendé módulos de Node.js jugando: arreglá los archivos rotos de la trastienda de Mueblería Hermanos Jota.",
+  "lang": "es-AR",
+  "start_url": "./",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#fbf5ec",
+  "theme_color": "#b5651d"
+}
