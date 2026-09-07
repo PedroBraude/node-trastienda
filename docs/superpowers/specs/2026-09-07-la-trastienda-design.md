@@ -52,7 +52,7 @@ Biblioteca Modular - 8 unidades
 |---|---|---|---|---|---|
 | 1 | El punto-barra | `app.js`, `productos.js` | `require("productos")` | `Error: Cannot find module 'productos'` | `require("./productos")` |
 | 2 | La etiqueta de la caja | `app.js`, `productos.js` | falta `module.exports = catalogo` | `Productos en el catálogo: undefined` y luego `TypeError: catalogo.forEach is not a function` | agregar `module.exports = catalogo` |
-| 3 | Varias herramientas | `app.js`, `productos.js`, `utilidades.js` | `module.exports = formatearPrecio` (una sola) con `const { formatearPrecio, calcularTotal } = require("./utilidades")` | `TypeError: calcularTotal is not a function` | `module.exports = { formatearPrecio, calcularTotal }` |
+| 3 | Varias herramientas | `app.js`, `productos.js`, `utilidades.js` | `module.exports = formatearPrecio` (una sola) con `const { formatearPrecio, calcularTotal } = require("./utilidades")` | `TypeError: formatearPrecio is not a function` (al destructurar una función, las dos quedan `undefined`) | `module.exports = { formatearPrecio, calcularTotal }` |
 | 4 | El total no cierra | `app.js`, `productos.js` | en un producto la clave es `precios` en vez de `precio` | `Mesa de Roble Macizo — $undefined` y `Total: NaN` | corregir la clave |
 | 5 | De fábrica | `leer.js`, `inventario.txt` | `require("./fs")` | `Error: Cannot find module './fs'` | `require("fs")` |
 
