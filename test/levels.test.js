@@ -110,6 +110,10 @@ test('finishing a chapter shows its closing line, finishing all shows the win sc
     g.run();
     if (i === 4) assert.match(g.doc.querySelector('#feedback').textContent, /El catálogo volvió a andar/);
   }
+  assert.equal(g.doc.querySelector('#win').hidden, true);
+  const finish = g.doc.querySelector('#nextRow button');
+  assert.equal(finish.textContent, 'Ver qué sigue');
+  finish.click();
   assert.equal(g.doc.querySelector('#win').hidden, false);
 });
 

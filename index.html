@@ -909,20 +909,20 @@ function run() {
   fb.textContent = msg;
   renderNav();
   saveProgress();
-  if (state.done.size === LEVELS.length) {
-    $('#win').hidden = false;
-    $('.app').setAttribute('inert', '');
-    $('#resetBtn').focus();
-    return;
-  }
-  if (i + 1 < LEVELS.length) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'primary';
-    b.textContent = 'Siguiente nivel';
-    b.addEventListener('click', () => loadLevel(i + 1));
-    $('#nextRow').appendChild(b);
-  }
+  const last = i + 1 === LEVELS.length;
+  if (last && state.done.size < LEVELS.length) return;
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'primary';
+  b.textContent = last ? 'Ver qué sigue' : 'Siguiente nivel';
+  b.addEventListener('click', last ? showWin : () => loadLevel(i + 1));
+  $('#nextRow').appendChild(b);
+}
+
+function showWin() {
+  $('#win').hidden = false;
+  $('.app').setAttribute('inert', '');
+  $('#resetBtn').focus();
 }
 
 function showSolution() {
